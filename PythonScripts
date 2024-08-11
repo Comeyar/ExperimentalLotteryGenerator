@@ -1,0 +1,204 @@
+# Python codes for o-tree experimental settings of lottery generation. You need to define 'question list' (and 'default list' if necessary) first.
+
+
+class Player(BasePlayer):
+    # number_lottery_chosen = models.IntegerField(
+    #     label="Please Choose a Gamble",
+    #     choices=[
+    #         [1, "Gamble 1"],
+    #         [2, "Gamble 2"]
+    #     ],
+    #     widget=widgets.RadioSelect,
+    # )
+    # Zexin commented the above. Instead:
+    number_lottery_chosen = models.IntegerField()
+    # We are going to save a treatment in the player model when the Subsession is created
+    is_treatment_1 = models.BooleanField()
+
+    # time0 = models.FloatField(initial=0)
+    # time1 = models.FloatField(initial=0)
+    # time2 = models.FloatField(initial=0)
+    # time3 = models.FloatField(initial=0)
+
+
+
+class Subsession(BaseSubsession):
+    pass
+
+
+class Group(BaseGroup):
+    pass
+
+
+# FUNCTIONS
+def creating_session(subsession: Subsession):
+    # # balanced randomisation of subjects into treatment 1 and 2
+    # treatment_cycle = itertools.cycle([True, False])
+    # for player in subsession.get_players():
+    #     if subsession.round_number == 1:
+    #         player.is_treatment_1 = next(treatment_cycle)
+    #     else:
+    #         player.is_treatment_1 = player.in_round(1).is_treatment_1
+    pass
+
+
+def draw_lottery(lottery):
+#    lottery_probability_payoff_1 = lottery["probability 1"]
+    # lottery_probability_payoff_1 = 0.5
+    lottery_payoff_1 = lottery["payoff 1"]
+    lottery_payoff_2 = lottery["payoff 2"]
+    lottery_payoff_3 = lottery["payoff 3"]
+    lottery_payoff_4 = lottery["payoff 4"]
+    # np.random.rand() draws a number from a (0,1) uniform distribution
+
+    # if np.random.rand() < lottery_probability_payoff_1:
+    #     return lottery_payoff_1
+    # else:
+    #     return lottery_payoff_2
+
+    if np.random.rand() > 0.75:
+        return lottery_payoff_1
+    elif np.random.rand() > 0.5:
+        return lottery_payoff_2
+    elif np.random.rand() > 0.25:
+        return lottery_payoff_3
+    else:
+        return lottery_payoff_4
+
+
+# PAGES
+# class Introduction(Page):
+#     pass
+
+class RT(ExtraModel):
+    # only for response times
+    player = models.Link(Player)
+    # rt_data = JSONField()
+    type = models.StringField()
+    time = models.FloatField()
+
+class MyPage(Page):
+    form_model = 'player'
+    # names must correspond to fields in models.py
+    form_fields = ['number_lottery_chosen']
+
+    @staticmethod
+    def vars_for_template(player: Player):
+        question = Constants.question_list[player.round_number - 1]
+        default = Constants.default_list[player.round_number - 1]
+        # if player.is_treatment_1:
+        #     question = Constants.question_list_treatment_1[player.round_number - 1]
+        # else:
+        #     question = Constants.question_list_treatment_2[player.round_number - 1]
+
+        return {
+            # 'lottery_1_value_1': question["lottery 1"]["payoff 1"],
+            # 'lottery_1_probability_1': int(question["lottery 1"]["probability 1"] * 100),
+            # 'lottery_1_value_2': question["lottery 1"]["payoff 2"],
+            # 'lottery_1_probability_2': int(question["lottery 1"]["probability 2"] * 100),
+            # 'lottery_2_value_1': question["lottery 2"]["payoff 1"],
+            # 'lottery_2_probability_1': int(question["lottery 2"]["probability 1"] * 100),
+            # 'lottery_2_value_2': question["lottery 2"]["payoff 2"],
+            # 'lottery_2_probability_2': int(question["lottery 2"]["probability 2"] * 100),
+            'lottery_1_value_1': question["gamble 1"]["payoff 1"],
+            'lottery_1_value_2': question["gamble 1"]["payoff 2"],
+            'lottery_1_value_3': question["gamble 1"]["payoff 3"],
+            'lottery_1_value_4': question["gamble 1"]["payoff 4"],
+            'lottery_2_value_1': question["gamble 2"]["payoff 1"],
+            'lottery_2_value_2': question["gamble 2"]["payoff 2"],
+            'lottery_2_value_3': question["gamble 2"]["payoff 3"],
+            'lottery_2_value_4': question["gamble 2"]["payoff 4"],
+            'default_value': default["value"]
+        #    'lottery_2_probability_4': int(question["lottery 2"]) etc.
+        }
+
+    @staticmethod
+    def before_next_page(player, timeout_happened):
+        participant = player.participant
+        lottery_key = "gamble " + str(player.number_lottery_chosen)
+        lottery = Constants.question_list[player.round_number - 1][lottery_key]
+#         if player.is_treatment_1:
+# #            lottery = Constants.question_list_treatment_1[player.round_number - 1][lottery_key]
+#             lottery = Constants.question_list[player.round_number - 1][lottery_key]
+#         else:
+# #            lottery = Constants.question_list_treatment_2[player.round_number - 1][lottery_key]
+#             lottery = Constants.question_list[player.round_number - 1][lottery_key]
+
+        player.payoff = cu(draw_lottery(lottery))
+
+
+    @staticmethod
+    def live_method(player, rt_data):
+        # prints in the terminal every time an RT is recorded
+        print('received rt from', player.id_in_group, 'in round : ', player.round_number, ':', rt_data)
+        # this will show in the console
+        sent_time = {'player': player.id_in_group, 'round': player.round_number,
+                     'type': rt_data['type'], 'time': rt_data['time']}
+        # creata data to store RTs from live pages
+        RT.create(player=player, type=rt_data['type'], time=rt_data['time'])
+        return {player.id_in_group: sent_time}
+
+
+
+
+class Results(Page):
+    @staticmethod
+    def is_displayed(player):
+        return player.round_number == Constants.num_rounds
+
+    @staticmethod
+    def vars_for_template(player: Player):
+        # if player.round_number == Constants.num_rounds:
+        #     return {
+        #         'display_cumulative_payoff': True,
+        #         'cumulative_payoff': sum([p.payoff for p in player.in_all_rounds()])
+        #     }
+        # else:
+        #     return {
+        #         'display_cumulative_payoff': False,
+        #     }
+        participant = player.participant
+        if player.round_number == Constants.num_rounds:
+            random_round = random.randint(1, Constants.num_rounds)
+            participant.selected_round = random_round
+            player_in_selected_round = player.in_round(random_round)
+            random_payoff = player_in_selected_round.payoff
+
+            return {
+                # 'display_cumulative_payoff': True,
+                # 'cumulative_payoff': random_payoff
+                'display_random_payoff': True,
+                'random_payoff': random_payoff
+            }
+        else:
+            return {
+                # 'display_cumulative_payoff': False,
+                'display_random_payoff': False,
+            }
+
+
+def custom_export(players):
+    yield [
+        'session_code',
+        'participant_code',
+        'round_number',
+        'type',
+        'time',
+        'lottery chosen'
+    ]
+    for p in players:
+        pp = p.participant
+        session_code = pp.session.code
+        for rt in RT.filter(player=p):
+            yield [
+                session_code,
+                pp.code,
+                p.round_number,
+                rt.type,
+                rt.time,
+                p.number_lottery_chosen
+            ]
+
+
+
+page_sequence = [MyPage, Results]
